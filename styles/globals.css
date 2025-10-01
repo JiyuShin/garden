@@ -1,0 +1,87 @@
+/* Global layout */
+body {
+  height: 100vh;
+  overflow: hidden;
+  margin: 0;
+}
+
+/* Stage container at the bottom center */
+#stage {
+  position: absolute;
+  width: 800px;
+  height: 600px;
+  left: 50%;
+  bottom: -80px;
+  transform: translateX(-50%);
+}
+
+/* SVG paths default style */
+path {
+  fill: none;
+  stroke: green;
+}
+
+/* Button styles (expanded from nested selectors) */
+button {
+  border: 1px solid rgba(0,0,0,0.2);
+  font-weight: bold;
+  box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.37);
+  text-transform: uppercase;
+  transition: all 0.5s ease;
+  line-height: 1.6;
+  padding: 8px 18px;
+  background: #FFC107;
+  color: #555;
+  cursor: pointer;
+}
+
+button:focus {
+  outline: none;
+}
+
+button:hover {
+  border: 1px solid rgba(0,0,0,0.5);
+  color: #000;
+}
+
+/* HUD for controls */
+.hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 15px;
+}
+
+/* Grass animation helpers */
+#stage svg {
+  overflow: visible;
+}
+
+.grass-blade {
+  stroke: #2e7d32;
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+@keyframes grow {
+  from { stroke-dashoffset: var(--path-length, 400); }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes sway {
+  0%   { transform: rotate(calc(var(--angle, 4deg) * -1)); }
+  50%  { transform: rotate(var(--angle, 4deg)); }
+  100% { transform: rotate(calc(var(--angle, 4deg) * -1)); }
+}
+
+.grass-sway {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: sway var(--duration, 3s) ease-in-out var(--delay, 0s) infinite alternate;
+}
+
+.grass-grow {
+  animation: grow var(--growDuration, 2.5s) ease-out forwards;
+}
+
+
