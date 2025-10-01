@@ -32,7 +32,7 @@ export default function GrassStage({ width = 800, height = 600, blades = 80 }) {
   useEffect(() => {}, []);
 
   return (
-    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 1 }}>
       <div id="stage" aria-hidden>
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
           {bladesData.map((b, idx) => (
