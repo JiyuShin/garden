@@ -3,12 +3,13 @@ body {
   height: 100vh;
   overflow: hidden;
   margin: 0;
+  background: #000;
 }
 
 /* Stage container at the bottom center */
 #stage {
   position: absolute;
-  width: 800px;
+  width: 100vw;
   height: 600px;
   left: 50%;
   bottom: -80px;

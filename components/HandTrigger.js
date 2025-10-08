@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 
-// Props: onDetect(boolean) => void, onMove(xNorm in [0,1]) => void, onPinch(pinchNorm) => void, onPoint(xNorm,yNorm) => void, onPointingChange(boolean) => void, onArmedChange(boolean) => void, preview=false
-export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPointingChange, onArmedChange, preview = false }) {
+// Props: onDetect(boolean) => void, onMove(xNorm in [0,1]) => void, onPinch(pinchNorm) => void, onPoint(xNorm,yNorm) => void, onPointingChange(boolean) => void, onArmedChange(boolean) => void, onPinchModeChange(boolean) => void, preview=false
+export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPointingChange, onArmedChange, onPinchModeChange, preview = false }) {
   const videoRef = useRef(null);
   const rafRef = useRef(0);
   const landmarkerRef = useRef(null);
@@ -17,15 +17,20 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
   const pointingActiveRef = useRef(false);
   const pointingOnStreakRef = useRef(0);
   const pointingOffStreakRef = useRef(0);
+  const detectingRef = useRef(false);
 
-  const FRAME_INTERVAL_MS = 33; // ~30fps
+  const FRAME_INTERVAL_MS = 16; // ~60fps for more responsive pinch/point updates
   const SMOOTH_ALPHA = 0.25; // EMA smoothing factor
   const MIN_DELTA = 0.01; // minimal change to notify
   // Movement arming by pinch-close (thumb-index together)
-  const ARM_ON_DIST = 0.06; // normalized
-  const ARM_ON_FRAMES = 10; // hold for consecutive frames
+  const ARM_ON_DIST = 0.07; // easier to arm: allow slightly larger pinch distance
+  const ARM_ON_FRAMES = 3; // quick unlock after a short pinch
   const armedRef = useRef(false);
   const armOnStreakRef = useRef(0);
+  // Pinch mode hysteresis (size control only during pinch mode)
+  const PINCH_ON = 0.10;
+  const PINCH_OFF = 0.14;
+  const pinchModeRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +45,7 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
         const handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
           baseOptions: {
             modelAssetPath: '/hand_landmarker.task',
+            delegate: 'CPU', // Force CPU to avoid WebGL texture errors
           },
           runningMode: 'VIDEO',
           numHands: 1,
@@ -47,7 +53,7 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
         if (cancelled) return;
         landmarkerRef.current = handLandmarker;
 
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60, max: 60 } }, audio: false });
         if (cancelled) return;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -65,7 +71,21 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
             return;
           }
           lastTimeRef.current = nowInMs;
-          const result = landmarkerRef.current.detectForVideo(videoRef.current, nowInMs);
+          const v = videoRef.current;
+          // Ensure the video is ready and has dimensions
+          if (v.readyState < 2 || !v.videoWidth || !v.videoHeight || detectingRef.current) {
+            rafRef.current = requestAnimationFrame(render);
+            return;
+          }
+          let result = null;
+          try {
+            detectingRef.current = true;
+            result = landmarkerRef.current.detectForVideo(v, nowInMs);
+          } catch (err) {
+            // Swallow sporadic backend texture creation errors and continue next frame
+          } finally {
+            detectingRef.current = false;
+          }
           const detected = !!(result && result.handednesses && result.handednesses[0] && result.handednesses[0].length > 0);
           if (detected && result.landmarks && result.landmarks[0] && result.landmarks[0][0]) {
             // Use wrist or first landmark's x (range 0..videoWidth). Normalize to 0..1
@@ -84,10 +104,19 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
               const dy = thumb.y - index.y;
               const dist = Math.sqrt(dx * dx + dy * dy); // normalized distance in 0..~1
               emaPinchRef.current = emaPinchRef.current == null ? dist : (SMOOTH_ALPHA * dist + (1 - SMOOTH_ALPHA) * emaPinchRef.current);
-              if (lastReportedPinchRef.current == null || Math.abs(emaPinchRef.current - lastReportedPinchRef.current) > MIN_DELTA) {
-                // Report pinch value; caller may ignore until armed
-                onPinch?.(emaPinchRef.current);
-                lastReportedPinchRef.current = emaPinchRef.current;
+              // Pinch mode hysteresis
+              const prevMode = pinchModeRef.current;
+              if (!prevMode && emaPinchRef.current < PINCH_ON) {
+                pinchModeRef.current = true;
+                onPinchModeChange?.(true);
+              } else if (prevMode && emaPinchRef.current > PINCH_OFF) {
+                pinchModeRef.current = false;
+                onPinchModeChange?.(false);
+              }
+              if (pinchModeRef.current) {
+                // Max responsiveness: emit raw distance every frame during pinch mode
+                onPinch?.(dist);
+                lastReportedPinchRef.current = dist;
               }
               // Arm movement when pinch is held closed for ARM_ON_FRAMES
               if (!armedRef.current) {
