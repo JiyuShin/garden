@@ -18,48 +18,91 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
   const pointingOnStreakRef = useRef(0);
   const pointingOffStreakRef = useRef(0);
   const detectingRef = useRef(false);
+  const keepAliveTimerRef = useRef(0);
+  const streamRef = useRef(null);
+  const lastDetectedRef = useRef(false);
 
   const FRAME_INTERVAL_MS = 16; // ~60fps for more responsive pinch/point updates
   const SMOOTH_ALPHA = 0.25; // EMA smoothing factor
   const MIN_DELTA = 0.01; // minimal change to notify
-  // Movement arming by pinch-close (thumb-index together)
-  const ARM_ON_DIST = 0.07; // easier to arm: allow slightly larger pinch distance
-  const ARM_ON_FRAMES = 3; // quick unlock after a short pinch
+  // Movement arming by FIST (전체 손 오므리기)
+  const FIST_THRESHOLD = 0.20; // 손 전체 크기가 이 값보다 작으면 주먹/오므린 손 (더 쉽게 감지)
+  const ARM_ON_FRAMES = 2; // 오므린 손 유지 프레임 수 (빠르게 반응)
   const armedRef = useRef(false);
   const armOnStreakRef = useRef(0);
+  const emaFistRef = useRef(null); // 손 크기 smoothing
   // Pinch mode hysteresis (size control only during pinch mode)
-  const PINCH_ON = 0.10;
-  const PINCH_OFF = 0.14;
+  const PINCH_ON = 0.10; // easier to enter pinch so size reacts sooner
+  const PINCH_OFF = 0.16; // exit a bit later to avoid flicker
   const pinchModeRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     async function setup() {
       try {
+        // 카메라 권한을 먼저 요청
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60, max: 60 } }, audio: false });
+        if (cancelled) return;
+        
+        // 비디오 준비될 때까지 대기
+        if (videoRef.current) {
+          const video = videoRef.current;
+          streamRef.current = stream;
+          video.srcObject = stream;
+          video.muted = true;
+          video.playsInline = true;
+          
+          // loadedmetadata 이벤트 대기
+          await new Promise((resolve) => {
+            video.onloadedmetadata = () => {
+              video.play().then(resolve).catch(() => resolve());
+            };
+          });
+        }
+
+        // 카메라 시작 후 MediaPipe 라이브러리 로드
         const vision = await import('@mediapipe/tasks-vision');
         const { FilesetResolver, HandLandmarker } = vision;
+        
         const filesetResolver = await FilesetResolver.forVisionTasks(
-          // CDN base. Using relative path for model file in public.
           'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
         );
+        
         const handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
           baseOptions: {
             modelAssetPath: '/hand_landmarker.task',
-            delegate: 'CPU', // Force CPU to avoid WebGL texture errors
+            delegate: 'CPU',
           },
           runningMode: 'VIDEO',
           numHands: 1,
         });
+        
         if (cancelled) return;
         landmarkerRef.current = handLandmarker;
 
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60, max: 60 } }, audio: false });
-        if (cancelled) return;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
+        // Keep-alive: ensure video keeps playing and tracks are live
+        const ensureLive = async () => {
+          const v = videoRef.current;
+          const s = streamRef.current;
+          try {
+            if (v && v.paused) await v.play();
+            const tracks = s ? s.getVideoTracks?.() : [];
+            const ended = tracks && tracks.some(t => t.readyState !== 'live');
+            if (ended) {
+              const ns = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60, max: 60 } }, audio: false });
+              if (videoRef.current) {
+                videoRef.current.srcObject = ns;
+                streamRef.current = ns;
+                await videoRef.current.play();
+              }
+            }
+          } catch (_) {
+            // ignore transient errors
+          }
+        };
+        keepAliveTimerRef.current = setInterval(ensureLive, 15000);
 
+        let renderStarted = false;
         const render = () => {
           if (!videoRef.current || !landmarkerRef.current) {
             rafRef.current = requestAnimationFrame(render);
@@ -77,16 +120,29 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
             rafRef.current = requestAnimationFrame(render);
             return;
           }
+          
+          if (!renderStarted) {
+            renderStarted = true;
+          }
           let result = null;
           try {
             detectingRef.current = true;
             result = landmarkerRef.current.detectForVideo(v, nowInMs);
           } catch (err) {
-            // Swallow sporadic backend texture creation errors and continue next frame
+            // 감지 에러 무시
           } finally {
             detectingRef.current = false;
           }
-          const detected = !!(result && result.handednesses && result.handednesses[0] && result.handednesses[0].length > 0);
+          // Consider detection successful if landmarks are present (more robust than handedness presence)
+          const detected = !!(result && result.landmarks && result.landmarks[0] && result.landmarks[0].length > 0);
+          
+          // 감지 상태 변화 추적
+          if (detected && !lastDetectedRef.current) {
+            lastDetectedRef.current = true;
+          } else if (!detected && lastDetectedRef.current) {
+            lastDetectedRef.current = false;
+          }
+          
           if (detected && result.landmarks && result.landmarks[0] && result.landmarks[0][0]) {
             // Use wrist or first landmark's x (range 0..videoWidth). Normalize to 0..1
             const x = result.landmarks[0][0].x; // already normalized 0..1 in Tasks API
@@ -103,42 +159,81 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
               const dx = thumb.x - index.x;
               const dy = thumb.y - index.y;
               const dist = Math.sqrt(dx * dx + dy * dy); // normalized distance in 0..~1
+              
+              // 항상 핀치 거리를 전달 (부드러운 크기 조절을 위해)
+              onPinch?.(dist);
+              
               emaPinchRef.current = emaPinchRef.current == null ? dist : (SMOOTH_ALPHA * dist + (1 - SMOOTH_ALPHA) * emaPinchRef.current);
-              // Pinch mode hysteresis
-              const prevMode = pinchModeRef.current;
-              if (!prevMode && emaPinchRef.current < PINCH_ON) {
-                pinchModeRef.current = true;
-                onPinchModeChange?.(true);
-              } else if (prevMode && emaPinchRef.current > PINCH_OFF) {
-                pinchModeRef.current = false;
-                onPinchModeChange?.(false);
+              // Pinch mode hysteresis (disabled while pointing)
+              const wasMode = pinchModeRef.current;
+              if (pointingActiveRef.current) {
+                // While pointing, never be in pinch mode
+                if (wasMode) {
+                  pinchModeRef.current = false;
+                  onPinchModeChange?.(false);
+                }
+              } else {
+                if (!wasMode && emaPinchRef.current < PINCH_ON) {
+                  pinchModeRef.current = true;
+                  onPinchModeChange?.(true);
+                } else if (wasMode && emaPinchRef.current > PINCH_OFF) {
+                  pinchModeRef.current = false;
+                  onPinchModeChange?.(false);
+                }
               }
-              if (pinchModeRef.current) {
-                // Max responsiveness: emit raw distance every frame during pinch mode
-                onPinch?.(dist);
-                lastReportedPinchRef.current = dist;
-              }
-              // Arm movement when pinch is held closed for ARM_ON_FRAMES
+            }
+            
+            // Arm movement when FIST is detected (손 전체를 오므림)
+            // 손목에서 모든 손가락 끝까지의 평균 거리로 손 크기 측정
+            const wrist = result.landmarks[0][0];
+            const thumbTip = result.landmarks[0][4];
+            const indexTip = result.landmarks[0][8];
+            const middleTip = result.landmarks[0][12];
+            const ringTip = result.landmarks[0][16];
+            const pinkyTip = result.landmarks[0][20];
+            
+            if (wrist && thumbTip && indexTip && middleTip && ringTip && pinkyTip) {
+              const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+              const avgDist = (
+                dist(wrist, thumbTip) +
+                dist(wrist, indexTip) +
+                dist(wrist, middleTip) +
+                dist(wrist, ringTip) +
+                dist(wrist, pinkyTip)
+              ) / 5;
+              
+              emaFistRef.current = emaFistRef.current == null ? avgDist : (SMOOTH_ALPHA * avgDist + (1 - SMOOTH_ALPHA) * emaFistRef.current);
+              
               if (!armedRef.current) {
-                if (emaPinchRef.current < ARM_ON_DIST) {
+                if (emaFistRef.current < FIST_THRESHOLD) {
                   armOnStreakRef.current += 1;
                   if (armOnStreakRef.current >= ARM_ON_FRAMES) {
                     armedRef.current = true;
                     onArmedChange?.(true);
+                    console.log('✊✊✊ 손 오므림 - Armed ON, 손 크기:', emaFistRef.current.toFixed(3));
                   }
                 } else {
                   armOnStreakRef.current = 0;
                 }
+              } else {
+                // Armed 모드 해제: 손을 펼쳤을 때
+                if (emaFistRef.current > FIST_THRESHOLD * 1.5) {
+                  armedRef.current = false;
+                  armOnStreakRef.current = 0;
+                  onArmedChange?.(false);
+                  console.log('✋ 손 펼침 - Armed OFF, 손 크기:', emaFistRef.current.toFixed(3));
+                }
               }
             }
             // Pointing position using index tip (8) relative to wrist (0) for translation-invariant pointing
-            const wrist = result.landmarks[0][0];
-            const idxTip = index;
+            // wrist, indexTip은 위에서 이미 선언됨
             const idxMcp = result.landmarks[0][5];
-            if (wrist && idxTip && idxMcp && typeof wrist.x === 'number' && typeof idxTip.x === 'number' && typeof idxMcp.x === 'number') {
+            const idxPip = result.landmarks[0][6];
+            const idxDip = result.landmarks[0][7];
+            if (wrist && indexTip && idxMcp && typeof wrist.x === 'number' && typeof indexTip.x === 'number' && typeof idxMcp.x === 'number') {
               // Relative vector from wrist to index tip
-              const vx = idxTip.x - wrist.x;
-              const vy = idxTip.y - wrist.y;
+              const vx = indexTip.x - wrist.x;
+              const vy = indexTip.y - wrist.y;
               // Normalize by hand scale (wrist->index_mcp distance)
               const sx = idxMcp.x - wrist.x;
               const sy = idxMcp.y - wrist.y;
@@ -148,13 +243,22 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
               // Clamp to [-1, 1]
               rx = Math.max(-1, Math.min(1, rx));
               ry = Math.max(-1, Math.min(1, ry));
+              // Index straightness: chord / path length across MCP->PIP->DIP->TIP
+              let straight = 0;
+              if (idxPip && idxDip) {
+                const dist = (a,b) => Math.hypot((a.x-b.x),(a.y-b.y));
+                const seg = dist(idxMcp, idxPip) + dist(idxPip, idxDip) + dist(idxDip, indexTip);
+                const chord = dist(idxMcp, indexTip);
+                if (seg > 1e-6) straight = chord / seg; // 0..1
+              }
               // Magnitude threshold to avoid whole-hand small jitters
               const mag = Math.hypot(rx, ry);
-              // Hysteresis: turn ON when mag > 0.22 for 3 frames; turn OFF when mag < 0.12 for 5 frames
-              if (mag > 0.22) {
+              // Stricter hysteresis: require clearer pointing (straight index) to turn ON
+              // ON when (mag > 0.35 && straight > 0.9) for 4 frames; OFF when (mag < 0.18 || straight < 0.75) for 6 frames
+              if (mag > 0.35 && straight > 0.9) {
                 pointingOnStreakRef.current += 1;
                 pointingOffStreakRef.current = 0;
-              } else if (mag < 0.12) {
+              } else if (mag < 0.18 || straight < 0.75) {
                 pointingOffStreakRef.current += 1;
                 pointingOnStreakRef.current = 0;
               } else {
@@ -162,14 +266,17 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
                 pointingOffStreakRef.current = 0;
               }
               const wasActive = pointingActiveRef.current;
-              if (!wasActive && pointingOnStreakRef.current >= 3) {
+              if (!wasActive && pointingOnStreakRef.current >= 4) {
                 pointingActiveRef.current = true;
                 onPointingChange?.(true);
-              } else if (wasActive && pointingOffStreakRef.current >= 5) {
+                console.log('👉 포인팅 ON');
+              } else if (wasActive && pointingOffStreakRef.current >= 6) {
                 pointingActiveRef.current = false;
                 onPointingChange?.(false);
+                console.log('포인팅 OFF');
               }
-              if (pointingActiveRef.current) {
+              // Do not emit pointing updates while in pinch mode
+              if (pointingActiveRef.current && !pinchModeRef.current) {
                 emaPointXRef.current = emaPointXRef.current == null ? rx : (SMOOTH_ALPHA * rx + (1 - SMOOTH_ALPHA) * emaPointXRef.current);
                 emaPointYRef.current = emaPointYRef.current == null ? ry : (SMOOTH_ALPHA * ry + (1 - SMOOTH_ALPHA) * emaPointYRef.current);
                 const smx = emaPointXRef.current;
@@ -187,7 +294,8 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
         };
         rafRef.current = requestAnimationFrame(render);
       } catch (e) {
-        console.error(e);
+        console.error('HandTrigger 초기화 에러:', e);
+        // 초기화 실패해도 계속 진행 시도
         onDetect?.(false);
       }
     }
@@ -195,6 +303,7 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
     return () => {
       cancelled = true;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (keepAliveTimerRef.current) clearInterval(keepAliveTimerRef.current);
       const v = videoRef.current;
       if (v && v.srcObject) {
         const tracks = v.srcObject.getTracks?.() || [];
@@ -203,9 +312,14 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
     };
   }, [onDetect]);
 
+  const hiddenStyle = preview
+    ? { position: 'fixed', right: 12, bottom: 12, width: 160, height: 120, borderRadius: 8, opacity: 0.2, pointerEvents: 'none' }
+    : { position: 'fixed', left: -9999, top: -9999, width: 1, height: 1, opacity: 0, pointerEvents: 'none' };
+
   return (
-    <video ref={videoRef} playsInline muted style={{ display: preview ? 'block' : 'none', position: 'fixed', right: 12, bottom: 12, width: 160, height: 120, borderRadius: 8, opacity: 0.2, pointerEvents: 'none' }} />
+    <video ref={videoRef} playsInline muted style={hiddenStyle} />
   );
 }
+
 
 

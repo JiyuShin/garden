@@ -18,20 +18,14 @@ export default function ModelViewer({ src = '/yflower.glb', style, lookX = 0.5, 
     const el = ref.current;
     if (!el) return;
     try {
-      // Map lookX [0,1] -> theta [-30deg, 30deg]
-      const theta = (lookX - 0.5) * 60; // degrees
+      // Map lookX [0,1] -> theta [-60deg, 60deg] (wider range for better control)
+      const theta = (lookX - 0.5) * 120; // degrees
       // Keep phi and radius automatic; adjust only theta (azimuth)
       el.setAttribute('camera-orbit', `${theta.toFixed(2)}deg auto auto`);
-      // Toggle auto-rotate depending on hand activity
-      if (handActive && el.autoRotate) {
-        el.autoRotate = false;
-      } else if (!handActive && !el.autoRotate) {
-        el.autoRotate = true;
-      }
     } catch (_) {
       // no-op
     }
-  }, [lookX, handActive]);
+  }, [lookX]);
 
   const mergedStyle = {
     width: 'min(90vw, 640px)',
@@ -46,7 +40,6 @@ export default function ModelViewer({ src = '/yflower.glb', style, lookX = 0.5, 
       src={src}
       alt="yflower 3D model"
       camera-controls
-      auto-rotate
       autoplay
       ar
       exposure="1"

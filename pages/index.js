@@ -1,144 +1,174 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import dynamic from 'next/dynamic';
 
 const ModelViewer = dynamic(() => import('../components/ModelViewer'), {
   ssr: false,
 });
-const GrassStage = dynamic(() => import('../components/GrassStage'), {
-  ssr: false,
-});
+
 const HandTrigger = dynamic(() => import('../components/HandTrigger'), {
   ssr: false,
 });
 
 export default function Home() {
-  const [showFlower, setShowFlower] = useState(false);
-  const [lookX, setLookX] = useState(0.5);
-  const [basePinch, setBasePinch] = useState(null);
-  const [scaleFactor, setScaleFactor] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 }); // displayed position
-  const [targetOffset, setTargetOffset] = useState({ x: 0, y: 0 }); // desired position from gesture
-  const offsetRef = useRef({ x: 0, y: 0 });
-  const targetOffsetRef = useRef({ x: 0, y: 0 });
-  const [lockCenter, setLockCenter] = useState(true);
-  const [pointingActive, setPointingActive] = useState(false);
-  const [armed, setArmed] = useState(false);
-  const [pinchMode, setPinchMode] = useState(false);
-  const lastPinchTsRef = useRef(0);
+  // 고정된 꽃들 배열 (화면에 계속 남아있음)
+  const [fixedFlowers, setFixedFlowers] = useState([]);
+  
+  // 현재 작업 중인 꽃 (노란색 또는 흰색)
+  const [currentFlower, setCurrentFlower] = useState(null); // { type: 'yellow' | 'white', position, scale, lookX }
+  
+  const [handDetected, setHandDetected] = useState(false);
+  const [isArmed, setIsArmed] = useState(false);
+  const [isPinchMode, setIsPinchMode] = useState(false);
+  const [isPointing, setIsPointing] = useState(false);
+  
+  const lastMoveXRef = useRef(0.5);
+  const flowerCountRef = useRef(0); // 꽃 개수 추적
 
-  // Animation/speed matching refs
-  const rafRef = useRef(0);
-  const lastTimeRef = useRef(0);
-  const lastTargetRef = useRef({ x: 0, y: 0, t: 0 });
-  const lastSpeedRef = useRef(0); // normalized units per second
-
-  // Keep refs in sync with state (single source of truth for RAF loop)
-  useEffect(() => {
-    offsetRef.current = offset;
-  }, [offset.x, offset.y]);
-  useEffect(() => {
-    targetOffsetRef.current = targetOffset;
-  }, [targetOffset.x, targetOffset.y]);
-
-  // Follow loop: move display offset toward target with speed tied to finger speed (single RAF loop)
-  useEffect(() => {
-    const loop = (ts) => {
-      if (!lastTimeRef.current) lastTimeRef.current = ts;
-      const dt = Math.max(0.001, (ts - lastTimeRef.current) / 1000);
-      lastTimeRef.current = ts;
-
-      // Compute desired step based on distance and recent finger speed
-      const dx = targetOffsetRef.current.x - offsetRef.current.x;
-      const dy = targetOffsetRef.current.y - offsetRef.current.y;
-      const dist = Math.hypot(dx, dy);
-
-      // Speed match: exponential smoothing toward target with speed tied to finger speed
-      const baseSpeed = 0.8; // units/sec (normalized)
-      const dyn = Math.min(3.0, lastSpeedRef.current * 1.2);
-      const speed = baseSpeed + dyn; // higher when finger moves faster
-      const rate = 1 - Math.exp(-speed * dt); // 0..1
-      if (dist > 0.0005) {
-        const nx = dx / (dist || 1);
-        const ny = dy / (dist || 1);
-        const step = dist * rate;
-        // Update both state and ref to stay in sync
-        const next = { x: offsetRef.current.x + nx * step, y: offsetRef.current.y + ny * step };
-        offsetRef.current = next;
-        setOffset(next);
-      }
-
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, []);
   return (
-    <main style={{minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif', position: 'relative'}}>
-      {showFlower ? (
-        <div style={{ position: 'absolute', zIndex: 999, top: '50%', left: '50%', transform: lockCenter ? `translate(-50%, -50%)` : `translate3d(calc(-50% + ${(offset.x * 150).toFixed(3)}vw), calc(-50% + ${(offset.y * 40).toFixed(3)}vh), 0)`, willChange: 'transform', pointerEvents: 'none' }}>
-          <div style={{ transform: `scale(${scaleFactor})`, transformOrigin: 'center center' }}>
-            <ModelViewer src="/yflower.glb" lookX={lookX} handActive />
-          </div>
+    <main style={{
+      minHeight: '100vh', 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      backgroundColor: '#000000',
+      position: 'relative'
+    }}>
+      {/* 고정된 꽃들 */}
+      {fixedFlowers.map((flower, index) => (
+        <div key={index} style={{ 
+          position: 'absolute', 
+          top: '50%', 
+          left: '50%', 
+          transform: `translate(calc(-50% + ${flower.position.x}px), calc(-50% + 140px + ${flower.position.y}px)) scale(${flower.scale})`,
+          transformOrigin: 'center center',
+        }}>
+          <ModelViewer 
+            src={flower.type === 'yellow' ? '/yflower.glb' : '/whitef.glb'} 
+            lookX={flower.lookX} 
+            handActive={false} 
+          />
         </div>
-      ) : null}
-      <GrassStage />
-      <HandTrigger preview={false} onMove={(x) => {
-        // 이동 중에는 시선(lookX) 업데이트를 멈춰 크기 변화로 보이는 효과를 방지
-        if (!armed || lockCenter) setLookX(x);
-      }} onPinch={(dist) => {
-        if (basePinch === null) {
-          setBasePinch(dist);
-          return;
-        }
-        const ratio = dist / (basePinch || 0.0001);
-        const clamped = Math.max(0.5, Math.min(2.0, ratio));
-        setScaleFactor(clamped);
-        lastPinchTsRef.current = performance.now();
-      }} onPoint={(x, y) => {
-        // x,y already in [-1,1] (index tip relative to wrist, normalized)
-        // Flip X to match mirrored webcam expectation; Y 그대로 사용
-        const nx = -x;
-        const ny = y;
-        const clampX = (v) => Math.max(-0.9, Math.min(0.9, v));
-        const clampY = (v) => Math.max(-0.3, Math.min(0.3, v));
-        const now = performance.now();
-        const suppressMs = 180; // ignore move shortly after pinch updates
-        const suppress = now - (lastPinchTsRef.current || 0) < suppressMs;
-        if (armed && pointingActive && !lockCenter && !pinchMode && !suppress) {
-          const tx = clampX(nx);
-          const ty = clampY(ny);
-          // Update instantaneous finger speed for speed matching
-          const now = performance.now();
-          const last = lastTargetRef.current;
-          if (last.t) {
-            const dt = Math.max(0.001, (now - last.t) / 1000);
-            const dv = Math.hypot(tx - last.x, ty - last.y);
-            lastSpeedRef.current = dv / dt; // units/sec
+      ))}
+      
+      {/* 현재 작업 중인 꽃 */}
+      {currentFlower && (
+        <div style={{ 
+          position: 'absolute', 
+          top: '50%', 
+          left: '50%', 
+          transform: `translate(calc(-50% + ${currentFlower.position.x}px), calc(-50% + 140px + ${currentFlower.position.y}px)) scale(${currentFlower.scale})`,
+          transformOrigin: 'center center',
+          transition: isArmed ? 'transform 0.1s ease-out' : 'transform 0.2s ease-out',
+        }}>
+          <ModelViewer 
+            src={currentFlower.type === 'yellow' ? '/yflower.glb' : '/whitef.glb'} 
+            lookX={currentFlower.lookX} 
+            handActive={handDetected} 
+          />
+        </div>
+      )}
+      
+      <HandTrigger 
+        preview={false}
+        onDetect={(detected) => {
+          setHandDetected(detected);
+          
+          // 현재 꽃이 없고 아무 모드도 아닐 때 새 꽃 생성
+          if (detected && !currentFlower && !isPinchMode && !isArmed && !isPointing) {
+            const flowerType = flowerCountRef.current % 2 === 0 ? 'yellow' : 'white';
+            setCurrentFlower({
+              type: flowerType,
+              position: { x: 0, y: 0 },
+              scale: 1,
+              lookX: 0.5
+            });
           }
-          lastTargetRef.current = { x: tx, y: ty, t: now };
-          const nextTarget = { x: tx, y: ty };
-          targetOffsetRef.current = nextTarget;
-          setTargetOffset(nextTarget);
-        }
-      }} onDetect={(detected) => {
-        if (detected && !showFlower) {
-          // 최초 감지 시 중앙에서 시작
-          const center = { x: 0, y: 0 };
-          offsetRef.current = center;
-          targetOffsetRef.current = center;
-          setOffset(center);
-          setTargetOffset(center);
-          setShowFlower(true);
-          setLockCenter(true);
-        }
-      }} onPointingChange={(active) => {
-        setPointingActive(active);
-      }} onArmedChange={(isArmed) => {
-        setArmed(isArmed);
-        if (isArmed && lockCenter) setLockCenter(false);
-      }} onPinchModeChange={(active) => {
-        setPinchMode(active);
-      }} />
+        }}
+        onMove={(xNorm) => {
+          if (!currentFlower) return;
+          
+          const deltaX = (xNorm - lastMoveXRef.current) * -2000;
+          
+          if (isArmed) {
+            // Armed 모드: 위치 이동 (더 스무스하게 - 작은 변화도 반영)
+            if (Math.abs(deltaX) > 1) {
+              setCurrentFlower(prev => ({
+                ...prev,
+                position: { x: prev.position.x + deltaX, y: prev.position.y }
+              }));
+            }
+          } else {
+            // 일반 모드: 시선 방향 제어
+            if (Math.abs(xNorm - lastMoveXRef.current) > 0.005) {
+              setCurrentFlower(prev => ({
+                ...prev,
+                lookX: xNorm
+              }));
+            }
+          }
+          lastMoveXRef.current = xNorm;
+        }}
+        onPinch={(distance) => {
+          if (!currentFlower || isArmed) return;
+          
+          const minDist = 0.02;
+          const maxDist = 0.5;
+          const minScale = 0.3;
+          const maxScale = 3.0;
+          const normalized = Math.max(0, Math.min(1, (distance - minDist) / (maxDist - minDist)));
+          const newScale = minScale + (maxScale - minScale) * normalized;
+          
+          setCurrentFlower(prev => ({
+            ...prev,
+            scale: newScale
+          }));
+        }}
+        onArmedChange={(active) => {
+          if (active && !isArmed) {
+            console.log(`✊ Armed 모드 ON - 현재 꽃: ${currentFlower?.type || 'none'}`);
+            setIsArmed(true);
+          } else if (!active && isArmed && currentFlower) {
+            // Armed 모드 해제 시 현재 꽃을 자동으로 고정
+            console.log(`🔒 Armed OFF - ${currentFlower.type} 꽃 자동 고정! (꽃 #${flowerCountRef.current})`);
+            
+            // 고정된 꽃 배열에 추가
+            setFixedFlowers(prev => [...prev, currentFlower]);
+            
+            // 꽃 카운트 증가
+            flowerCountRef.current += 1;
+            
+            // 다음 꽃 타입 결정
+            const nextFlowerType = currentFlower.type === 'yellow' ? 'white' : 'yellow';
+            
+            console.log(`✨ ${nextFlowerType} 꽃 자동 생성!`);
+            
+            // 즉시 다음 꽃을 중앙에 생성
+            setCurrentFlower({
+              type: nextFlowerType,
+              position: { x: 0, y: 0 },
+              scale: 1,
+              lookX: 0.5
+            });
+            
+            // 상태 초기화
+            setIsArmed(false);
+            setIsPointing(false);
+          }
+        }}
+        onPinchModeChange={(active) => {
+          if (active && !isArmed) {
+            setIsPinchMode(true);
+          } else if (!active) {
+            setIsPinchMode(false);
+          }
+        }}
+        onPointingChange={(active) => {
+          // Armed가 아닐 때만 포인팅 상태 저장
+          if (!isArmed) {
+            setIsPointing(active);
+          }
+        }}
+      />
     </main>
   );
 }
