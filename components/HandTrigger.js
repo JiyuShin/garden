@@ -70,7 +70,7 @@ export default function HandTrigger({ onDetect, onMove, onPinch, onPoint, onPoin
         
         const handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
           baseOptions: {
-            modelAssetPath: '/hand_landmarker.task',
+            modelAssetPath: `${typeof window !== 'undefined' ? window.location.origin : ''}/hand_landmarker.task`,
             delegate: 'CPU',
           },
           runningMode: 'VIDEO',
