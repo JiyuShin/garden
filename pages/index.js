@@ -5,6 +5,10 @@ const ModelViewer = dynamic(() => import('../components/ModelViewer'), {
   ssr: false,
 });
 
+const StaticModel = dynamic(() => import('../components/StaticModel'), {
+  ssr: false,
+});
+
 const HandTrigger = dynamic(() => import('../components/HandTrigger'), {
   ssr: false,
 });
@@ -33,6 +37,19 @@ export default function Home() {
       backgroundColor: '#000000',
       position: 'relative'
     }}>
+      {/* 화면 하단 잔디 */}
+      <div style={{ 
+        position: 'fixed', 
+        bottom: '-300px', 
+        left: '50%',
+        transform: 'translateX(calc(-50% - 200px))',
+        width: '500vw',
+        height: '150vh',
+        pointerEvents: 'none',
+      }}>
+        <StaticModel src='/grasses5.glb' />
+      </div>
+      
       {/* 고정된 꽃들 */}
       {fixedFlowers.map((flower, index) => (
         <div key={index} style={{ 
