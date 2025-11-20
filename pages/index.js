@@ -232,10 +232,14 @@ export default function Home() {
             // 꽃 카운트 증가
             flowerCountRef.current += 1;
             
-            // 다음 꽃 타입 결정
-            const nextFlowerType = currentFlower.type === 'yellow' ? 'white' : 'yellow';
+            // 다음 꽃 타입 결정 (flowerCountRef 기준으로 통일)
+            const nextFlowerType = flowerCountRef.current % 2 === 0 ? 'yellow' : 'white';
             
-            console.log(`✨ ${nextFlowerType} 꽃 자동 생성!`);
+            console.log(`✨ ${nextFlowerType} 꽃 자동 생성! (count: ${flowerCountRef.current})`);
+            
+            // 상태 초기화 먼저
+            setIsArmed(false);
+            setIsPointing(false);
             
             // 즉시 다음 꽃을 중앙에 생성
             setCurrentFlower({
@@ -244,10 +248,6 @@ export default function Home() {
               scale: 1,
               lookX: 0.5
             });
-            
-            // 상태 초기화
-            setIsArmed(false);
-            setIsPointing(false);
           }
         }}
         onPinchModeChange={(active) => {
