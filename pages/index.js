@@ -132,6 +132,8 @@ export default function Home() {
           left: '50%', 
           transform: `translate(calc(-50% + ${flower.position.x}px), calc(-50% + 140px + ${flower.position.y}px)) scale(${flower.scale})`,
           transformOrigin: 'center center',
+          willChange: 'transform',
+          backfaceVisibility: 'hidden',
         }}>
           <ModelViewer 
             src={flower.type === 'yellow' ? '/yflower.glb' : '/whitef.glb'} 
@@ -150,6 +152,8 @@ export default function Home() {
           transform: `translate(calc(-50% + ${currentFlower.position.x}px), calc(-50% + 140px + ${currentFlower.position.y}px)) scale(${currentFlower.scale})`,
           transformOrigin: 'center center',
           transition: isArmed ? 'transform 0.1s ease-out' : 'transform 0.2s ease-out',
+          willChange: 'transform',
+          backfaceVisibility: 'hidden',
         }}>
           <ModelViewer 
             src={currentFlower.type === 'yellow' ? '/yflower.glb' : '/whitef.glb'} 

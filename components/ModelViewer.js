@@ -31,6 +31,7 @@ export default function ModelViewer({ src = '/yflower.glb', style, lookX = 0.5, 
     width: 'min(90vw, 640px)',
     height: 'min(80vh, 640px)',
     background: 'transparent',
+    willChange: 'transform',
     ...style,
   };
 
@@ -42,8 +43,10 @@ export default function ModelViewer({ src = '/yflower.glb', style, lookX = 0.5, 
       camera-controls
       autoplay
       ar
-      exposure="1"
-      shadow-intensity="1"
+      exposure="1.2"
+      shadow-intensity="0.5"
+      max-pixel-ratio="2"
+      interaction-prompt="none"
       style={mergedStyle}
     />
   );
