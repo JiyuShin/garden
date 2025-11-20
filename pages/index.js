@@ -37,17 +37,91 @@ export default function Home() {
       backgroundColor: '#000000',
       position: 'relative'
     }}>
-      {/* 화면 하단 잔디 */}
-      <div style={{ 
+      {/* 화면 하단 잔디 - 왼쪽 */}
+      <div className="grass-container grass-container-1" style={{ 
         position: 'fixed', 
-        bottom: '-300px', 
+        bottom: '-680px', 
         left: '50%',
-        transform: 'translateX(calc(-50% - 200px))',
         width: '500vw',
         height: '150vh',
         pointerEvents: 'none',
       }}>
-        <StaticModel src='/grasses5.glb' />
+        <StaticModel src='/grasses5.glb' cameraOrbit='0deg 80deg auto' />
+      </div>
+      
+      {/* 화면 하단 잔디 - 오른쪽 (좌우반전) */}
+      <div className="grass-container grass-container-2" style={{ 
+        position: 'fixed', 
+        bottom: '-680px', 
+        left: '50%',
+        width: '500vw',
+        height: '150vh',
+        pointerEvents: 'none',
+      }}>
+        <StaticModel src='/grasses5.glb' cameraOrbit='0deg 80deg auto' />
+      </div>
+      
+      {/* 긴 풀들 - 왼쪽 영역 */}
+      <div className="grass-container grass-container-3" style={{ 
+        position: 'fixed', 
+        bottom: '-680px', 
+        left: '50%',
+        width: '500vw',
+        height: '150vh',
+        pointerEvents: 'none',
+        opacity: 0.9,
+      }}>
+        <StaticModel src='/grasses5.glb' cameraOrbit='0deg 80deg auto' />
+      </div>
+      
+      <div className="grass-container grass-container-4" style={{ 
+        position: 'fixed', 
+        bottom: '-660px', 
+        left: '50%',
+        width: '500vw',
+        height: '150vh',
+        pointerEvents: 'none',
+        opacity: 0.85,
+      }}>
+        <StaticModel src='/grasses5.glb' cameraOrbit='0deg 80deg auto' />
+      </div>
+      
+      {/* 긴 풀들 - 오른쪽 영역 */}
+      <div className="grass-container grass-container-5" style={{ 
+        position: 'fixed', 
+        bottom: '-640px', 
+        left: '50%',
+        width: '500vw',
+        height: '150vh',
+        pointerEvents: 'none',
+        opacity: 0.9,
+      }}>
+        <StaticModel src='/grasses5.glb' cameraOrbit='0deg 80deg auto' />
+      </div>
+      
+      <div className="grass-container grass-container-6" style={{ 
+        position: 'fixed', 
+        bottom: '-670px', 
+        left: '50%',
+        width: '500vw',
+        height: '150vh',
+        pointerEvents: 'none',
+        opacity: 0.8,
+      }}>
+        <StaticModel src='/grasses5.glb' cameraOrbit='0deg 80deg auto' />
+      </div>
+      
+      {/* 중앙 긴 풀 */}
+      <div className="grass-container grass-container-7" style={{ 
+        position: 'fixed', 
+        bottom: '-700px', 
+        left: '50%',
+        width: '500vw',
+        height: '150vh',
+        pointerEvents: 'none',
+        opacity: 0.75,
+      }}>
+        <StaticModel src='/grasses5.glb' cameraOrbit='0deg 80deg auto' />
       </div>
       
       {/* 고정된 꽃들 */}

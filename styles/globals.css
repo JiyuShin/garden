@@ -85,4 +85,79 @@ button:hover {
   animation: grow var(--growDuration, 2.5s) ease-out forwards;
 }
 
+/* 3D 모델 풀 흔들림 애니메이션 */
+@keyframes grassSway1 {
+  0%, 100% { transform: translateX(calc(-50% - 200px)) rotateZ(0deg); }
+  25% { transform: translateX(calc(-50% - 200px)) rotateZ(-1deg); }
+  75% { transform: translateX(calc(-50% - 200px)) rotateZ(1deg); }
+}
+
+@keyframes grassSway2 {
+  0%, 100% { transform: translateX(calc(-50% + 200px)) scaleX(-1) rotateZ(0deg); }
+  30% { transform: translateX(calc(-50% + 200px)) scaleX(-1) rotateZ(-1.2deg); }
+  70% { transform: translateX(calc(-50% + 200px)) scaleX(-1) rotateZ(1.2deg); }
+}
+
+@keyframes grassSway3 {
+  0%, 100% { transform: translateX(calc(-50% - 400px)) scale(1.3) rotateZ(0deg); }
+  20% { transform: translateX(calc(-50% - 400px)) scale(1.3) rotateZ(-1.5deg); }
+  80% { transform: translateX(calc(-50% - 400px)) scale(1.3) rotateZ(1.5deg); }
+}
+
+@keyframes grassSway4 {
+  0%, 100% { transform: translateX(calc(-50% - 100px)) scale(1.15) rotateZ(0deg); }
+  35% { transform: translateX(calc(-50% - 100px)) scale(1.15) rotateZ(-0.8deg); }
+  65% { transform: translateX(calc(-50% - 100px)) scale(1.15) rotateZ(0.8deg); }
+}
+
+@keyframes grassSway5 {
+  0%, 100% { transform: translateX(calc(-50% + 400px)) scaleX(-1.25) scaleY(1.25) rotateZ(0deg); }
+  40% { transform: translateX(calc(-50% + 400px)) scaleX(-1.25) scaleY(1.25) rotateZ(-1.3deg); }
+  60% { transform: translateX(calc(-50% + 400px)) scaleX(-1.25) scaleY(1.25) rotateZ(1.3deg); }
+}
+
+@keyframes grassSway6 {
+  0%, 100% { transform: translateX(calc(-50% + 100px)) scaleX(-1.1) scaleY(1.1) rotateZ(0deg); }
+  25% { transform: translateX(calc(-50% + 100px)) scaleX(-1.1) scaleY(1.1) rotateZ(-0.9deg); }
+  75% { transform: translateX(calc(-50% + 100px)) scaleX(-1.1) scaleY(1.1) rotateZ(0.9deg); }
+}
+
+@keyframes grassSway7 {
+  0%, 100% { transform: translateX(-50%) scale(1.2) rotateZ(0deg); }
+  30% { transform: translateX(-50%) scale(1.2) rotateZ(-1deg); }
+  70% { transform: translateX(-50%) scale(1.2) rotateZ(1deg); }
+}
+
+.grass-container {
+  transform-origin: bottom center;
+}
+
+.grass-container-1 {
+  animation: grassSway1 4s ease-in-out infinite;
+}
+
+.grass-container-2 {
+  animation: grassSway2 4.5s ease-in-out infinite;
+}
+
+.grass-container-3 {
+  animation: grassSway3 3.5s ease-in-out infinite;
+}
+
+.grass-container-4 {
+  animation: grassSway4 5s ease-in-out infinite;
+}
+
+.grass-container-5 {
+  animation: grassSway5 3.8s ease-in-out infinite;
+}
+
+.grass-container-6 {
+  animation: grassSway6 4.2s ease-in-out infinite;
+}
+
+.grass-container-7 {
+  animation: grassSway7 4.7s ease-in-out infinite;
+}
+
 

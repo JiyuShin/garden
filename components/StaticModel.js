@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-export default function StaticModel({ src, style }) {
+export default function StaticModel({ src, style, cameraOrbit = '0deg 75deg auto' }) {
   const ref = useRef(null);
   
   useEffect(() => {
@@ -26,6 +26,7 @@ export default function StaticModel({ src, style }) {
       ref={ref}
       src={src}
       alt="3D model"
+      camera-orbit={cameraOrbit}
       autoplay
       exposure="1"
       shadow-intensity="1"
